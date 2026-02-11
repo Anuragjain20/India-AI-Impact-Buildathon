@@ -54,12 +54,12 @@ honeypot/
 
 ## ⚙️ Setup & Run
 
-### 1. Create Environment
+### 1. Create Virtual Environment
 ```bash
 python -m venv env
 ```
 
-### 2. Activate Environment
+### 2. Activate Virtual Environment
 ```bash
 Powershell - .\env\Scripts\Activate.ps1
 CMD - env\Scripts\activate
@@ -73,8 +73,8 @@ pip install -r requirements.txt
 
 ### 4. Configure environment
 ```bash
-cp .env.example .env
-# Edit .env — set ANTHROPIC_API_KEY and optionally change HONEYPOT_API_KEY
+create .env file
+add GROQ_API_KEY
 ```
 
 ### 5. Start the server
