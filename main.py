@@ -1,19 +1,73 @@
-"""
-Legacy entrypoint for the advanced multi‑agent honeypot.
-
-The real implementation now lives in the `app` package (`app.core` + `app.api`),
-which is easier to extend and reason about for a large‑scale deployment or
-hackathon showcase.
-
-You can:
-- Run this file directly: `python main3.py`
-- Or run via uvicorn: `uvicorn app.api:app --host 0.0.0.0 --port 8000`
-"""
-
-from app.api import app  # re‑export FastAPI app for backwards compatibility
+from fastapi import FastAPI, Header, HTTPException
+from final.session_memory import SessionMemory
+from final.session_context_memory import SessionContextMemory
+from final.callback_service import send_callback
+from final.agents.team_orchestrator import process_message
+from final.config import API_KEY
 
 
-if __name__ == "__main__":
-    import uvicorn
+app = FastAPI()
 
-    uvicorn.run("app.api:app", host="0.0.0.0", port=8000, reload=False)
+memory = SessionMemory(max_history=20)
+context_memory = SessionContextMemory()
+
+
+@app.post("/honeypot")
+async def honeypot(payload: dict, x_api_key: str = Header(None)):
+
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid API Key")
+
+    session_id = payload["sessionId"]
+    msg = payload["message"]["text"]
+
+    # -------------------------
+    # Store scammer message
+    # -------------------------
+    memory.add_message(session_id, "scammer", msg)
+
+    history = memory.get_formatted_history(session_id)
+    previous_intel = context_memory.get_intel(session_id)
+
+    # -------------------------
+    # Process Message
+    # -------------------------
+    scam, reply, intel, session_end = await process_message(
+        msg,
+        history,
+        session_id,
+        previous_intel
+    )
+
+    # -------------------------
+    # Store persona reply
+    # -------------------------
+    memory.add_message(session_id, "user", reply)
+
+    # -------------------------
+    # Store extracted intelligence
+    # -------------------------
+    if intel:
+        context_memory.append_intel(session_id, intel)
+
+        print("\n[CUMULATIVE INTEL AFTER MERGE]")
+        print(context_memory.get_intel(session_id))
+
+
+    # -------------------------
+    # Send callback if scam found
+    # -------------------------
+    if scam and intel:
+        send_callback(session_id, len(memory.get_history(session_id)), intel)
+
+    # -------------------------
+    # Clear memory if session closed
+    # -------------------------
+    if session_end:
+        memory.clear_session(session_id)
+        context_memory.clear_session(session_id)
+
+    return {
+        "status": "success",
+        "reply": reply
+    }
