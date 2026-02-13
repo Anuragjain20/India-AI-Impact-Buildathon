@@ -1,9 +1,10 @@
 from fastapi import FastAPI, Header, HTTPException
-from session_memory import SessionMemory
-from session_context_memory import SessionContextMemory
-from callback_service import send_callback
-from agents.team_orchestrator import process_message
-from config import API_KEY
+from final.session_memory import SessionMemory
+from final.session_context_memory import SessionContextMemory
+from final.callback_service import send_callback
+from final.agents.team_orchestrator import process_message
+from final.config import API_KEY
+
 
 app = FastAPI()
 
