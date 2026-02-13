@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+python-dotenv
+pydantic
+requests
+numpy
+neo4j
+autogen-agentchat
+autogen-ext
+autogen-core
+openai
+tiktoken
+scikit-learn
