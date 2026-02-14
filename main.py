@@ -8,6 +8,19 @@ import time
 
 app = FastAPI()
 
+
+@app.get("/")
+def root():
+    """Lightweight health/root for cold-start warming and liveness."""
+    return {"status": "ok"}
+
+
+@app.get("/health")
+def health():
+    """Health check for probes and warm-up requests."""
+    return {"status": "ok"}
+
+
 memory = SessionMemory(max_history=20)
 context_memory = SessionContextMemory()
 

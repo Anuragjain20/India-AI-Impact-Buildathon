@@ -21,6 +21,7 @@ def get_model_client():
             "family": ModelFamily.UNKNOWN,
             "structured_output": True,
         },
+        max_tokens=1024,
     )
 
 def get_model_client_2():
