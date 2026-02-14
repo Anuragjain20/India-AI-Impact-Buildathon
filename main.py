@@ -114,4 +114,3 @@ async def honeypot(payload: dict, background_tasks: BackgroundTasks, x_api_key: 
         "status": "success",
         "reply": reply
     }
-
