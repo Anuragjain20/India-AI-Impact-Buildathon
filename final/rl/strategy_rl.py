@@ -4,7 +4,7 @@ import os
 
 class StrategyRL:
 
-    FILE = "strategy_q_table.json"
+    FILE = "/tmp/strategy_q_table.json"
 
     def __init__(self):
 
@@ -39,3 +39,4 @@ class StrategyRL:
         self.q_table[str((state, action))] = new_q
 
         json.dump(self.q_table, open(self.FILE, "w"))
+
