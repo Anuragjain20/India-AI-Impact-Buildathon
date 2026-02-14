@@ -18,7 +18,7 @@ Rules:
 - Once all relevant information has been clarified or the extraction agent has completed,
   respond with a short closing message like "Thank you." or "Conversation complete."
 - Avoid repeating questions or unnecessary explanations.
-- Don't return long responses. It must be realistic
 """
     )
+
 
