@@ -12,9 +12,11 @@ app = FastAPI()
 memory = SessionMemory(max_history=20)
 context_memory = SessionContextMemory()
 
+
 MAX_MESSAGES_PER_SESSION = 6
 MIN_MESSAGES_BEFORE_CALLBACK = 4
 callback_sent_tracker = {}
+active_session_tasks = {} # Tracks active background tasks per session
 
 
 async def background_processing(session_id, message, previous_intel, persona, action, session_end):
@@ -57,14 +59,16 @@ async def background_processing(session_id, message, previous_intel, persona, ac
             memory.clear_session(session_id)
             context_memory.clear_session(session_id)
             callback_sent_tracker.pop(session_id, None)
-            print(f"� Session {session_id} cleared in background.")
+            # Also clear the task tracker since session is over
+            active_session_tasks.pop(session_id, None)
+            print(f"🧹 Session {session_id} cleared in background.")
 
     except Exception as e:
         print(f"❌ Background Processing Error for {session_id}: {e}")
 
 
 @app.post("/honeypot")
-async def honeypot(payload: dict, background_tasks: BackgroundTasks, x_api_key: str = Header(None)):
+async def honeypot(payload: dict, x_api_key: str = Header(None)):
 
     api_start_time = time.perf_counter()
     print("\n================ API REQUEST START ================")
@@ -74,6 +78,16 @@ async def honeypot(payload: dict, background_tasks: BackgroundTasks, x_api_key: 
 
     session_id = payload["sessionId"]
     msg = payload["message"]["text"]
+
+    # -------------------------
+    # 0. Sync Check: Wait for previous background task
+    # -------------------------
+    if session_id in active_session_tasks:
+        existing_task = active_session_tasks[session_id]
+        if not existing_task.done():
+            print(f"⏳ Waiting for previous background task for {session_id}...")
+            await existing_task
+            print(f"✅ Previous task finished. Proceeding with new message.")
 
     # 1. Store scammer message
     memory.add_message(session_id, "scammer", msg)
@@ -95,17 +109,20 @@ async def honeypot(payload: dict, background_tasks: BackgroundTasks, x_api_key: 
     # 4. Store persona reply immediately (critical for history chain)
     memory.add_message(session_id, "user", reply)
 
-    # 5. Offload everything else to background
+    # 5. Offload everything else to background (Managed Task)
     if scam:
-        background_tasks.add_task(
-            background_processing,
-            session_id,
-            msg,
-            previous_intel,
-            persona,
-            action,
-            session_end
+        # Create a new task and track it
+        task = asyncio.create_task(
+            background_processing(
+                session_id,
+                msg,
+                previous_intel,
+                persona,
+                action,
+                session_end
+            )
         )
+        active_session_tasks[session_id] = task
 
     print(f"🚀 API RESPONSE SENT IN: {time.perf_counter() - api_start_time:.3f}s")
     print("================ API REQUEST END ==================\n")
