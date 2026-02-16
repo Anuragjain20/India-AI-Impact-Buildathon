@@ -1,1 +1,14 @@
-{"elderly": {"wins": 1, "trials": 5}, "student": {"wins": 33.050000000000004, "trials": 16}, "business_owner": {"wins": 1, "trials": 4}}
+{
+    "elderly": {
+        "wins": 1,
+        "trials": 5
+    },
+    "student": {
+        "wins": 33.050000000000004,
+        "trials": 16
+    },
+    "business_owner": {
+        "wins": 1,
+        "trials": 4
+    }
+}

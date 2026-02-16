@@ -2,6 +2,7 @@ import numpy as np
 import json
 import os
 
+
 class StrategyRL:
 
     FILE = "/tmp/strategy_q_table.json"
@@ -32,11 +33,8 @@ class StrategyRL:
         current = self.get_q(state, action)
         next_max = max([self.get_q(next_state, a) for a in actions])
 
-        new_q = current + self.alpha * (
-            reward + self.gamma * next_max - current
-        )
+        new_q = current + self.alpha * (reward + self.gamma * next_max - current)
 
         self.q_table[str((state, action))] = new_q
 
         json.dump(self.q_table, open(self.FILE, "w"))
-

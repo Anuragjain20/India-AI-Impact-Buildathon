@@ -1,6 +1,7 @@
 from autogen_agentchat.agents import AssistantAgent
 from final.model_client import get_model_client_2
 
+
 def build_persona_agent(persona):
     """
     PersonaAgent that asks clarifying questions and signals completion naturally.
@@ -74,8 +75,5 @@ Output Format
 Always reply using plain, natural dialogue only.
 
 Do NOT include meta-commentary, analysis, labels, or reasoning.
-"""
+""",
     )
-
-
-

@@ -19,15 +19,13 @@ class SessionMemory:
         if session_id not in self.sessions:
             self.sessions[session_id] = []
 
-        self.sessions[session_id].append({
-            "sender": sender,
-            "text": text,
-            "timestamp": datetime.utcnow().isoformat()
-        })
+        self.sessions[session_id].append(
+            {"sender": sender, "text": text, "timestamp": datetime.utcnow().isoformat()}
+        )
 
         # Trim old history if exceeding limit
         if len(self.sessions[session_id]) > self.max_history:
-            self.sessions[session_id] = self.sessions[session_id][-self.max_history:]
+            self.sessions[session_id] = self.sessions[session_id][-self.max_history :]
 
     # -------------------------
     # Get raw history

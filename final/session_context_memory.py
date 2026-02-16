@@ -26,7 +26,7 @@ class SessionContextMemory:
             "phishingLinks",
             "phoneNumbers",
             "bankAccounts",
-            "suspiciousKeywords"
+            "suspiciousKeywords",
         ]
 
         for field in list_fields:
@@ -36,16 +36,13 @@ class SessionContextMemory:
 
         # Keep highest confidence
         existing["confidenceScore"] = max(
-            existing.get("confidenceScore", 0),
-            new_intel.get("confidenceScore", 0)
+            existing.get("confidenceScore", 0), new_intel.get("confidenceScore", 0)
         )
 
         # Append notes
         if new_intel.get("agentNotes"):
             existing["agentNotes"] = (
-                existing.get("agentNotes", "")
-                + " | "
-                + new_intel.get("agentNotes", "")
+                existing.get("agentNotes", "") + " | " + new_intel.get("agentNotes", "")
             )
 
     # -------------------------

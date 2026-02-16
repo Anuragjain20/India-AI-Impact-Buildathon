@@ -10,5 +10,5 @@ Return JSON:
  "scamDetected": true/false,
  "confidenceScore": float
 }
-"""
+""",
 )
