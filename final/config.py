@@ -1,18 +1,15 @@
 import os
-import os
 from dotenv import load_dotenv
-
 
 load_dotenv()
 
 
-raw_keys = os.getenv("GROQ_API_KEY", "")
+def _required_env(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        raise RuntimeError(f"Missing required environment variable: {name}")
+    return value
 
 
-if raw_keys:
-    GROQ_API_KEY = [key.strip() for key in raw_keys.split(",")]
-else:
-    GROQ_API_KEY = []
-
-
-API_KEY = os.getenv("HONEYPOT_API_KEY")
+DEEPSEEK_API_KEY = _required_env("DEEPSEEK_API_KEY")
+API_KEY = _required_env("HONEYPOT_API_KEY")

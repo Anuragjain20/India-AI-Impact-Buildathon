@@ -1,5 +1,5 @@
 import json
-import time
+import re
 
 from final.agents.classifier_agent import classifier_agent
 from final.agents.persona_agent import build_persona_agent
@@ -13,6 +13,21 @@ persona_rl = PersonaRL()
 strategy_rl = StrategyRL()
 
 ACTIONS = ["clarify", "confused", "delay"]
+SCAM_KEYWORDS = [
+    "otp",
+    "verify immediately",
+    "verify now",
+    "account blocked",
+    "account suspended",
+    "urgent",
+    "upi",
+    "bank account",
+    "share your details",
+    "click here",
+    "refund link",
+    "kyc",
+    "password",
+]
 
 
 def intel_score(intel):
@@ -24,31 +39,56 @@ def intel_score(intel):
     score += len(intel.suspiciousKeywords) * 1
     score += intel.confidenceScore * 3
 
-    print("\n[INTEL SCORE]")
-    print("Calculated Score:", score)
+    
     return score
 
 
+def _fallback_scam_detection(message: str) -> bool:
+    normalized = re.sub(r"\s+", " ", message.lower()).strip()
+    return any(keyword in normalized for keyword in SCAM_KEYWORDS)
+
+
+def _safe_load_json(raw: str) -> dict:
+    content = raw.strip()
+    if content.startswith("```"):
+        lines = content.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip().startswith("```"):
+            lines = lines[:-1]
+        content = "\n".join(lines).strip()
+    return json.loads(content)
+
+
+async def _classify_message(message: str, history: str) -> bool:
+    task = f"""
+Conversation History:
+{history}
+
+Latest Message:
+{message}
+"""
+    try:
+        result = await classifier_agent.run(task=task)
+        raw = result.messages[-1].content
+        classification = _safe_load_json(raw)
+        return bool(classification.get("scamDetected", False))
+    except Exception:
+        return _fallback_scam_detection(message)
+
+
 async def process_message_reply(
-    message, history, session_id, previous_intel, message_count=1
+    message,
+    history,
+    session_id,
+    previous_intel,
+    message_count=1,
+    scam_already_confirmed=False,
 ):
 
-    total_start = time.perf_counter()
-    print("\n========== PHASE 1: GENERATE REPLY ==========")
-
-    if message_count <= 1:
-        t0 = time.perf_counter()
-        res = await classifier_agent.run(task=message)
-        print(f"⏱ Classifier: {time.perf_counter() - t0:.3f}s")
-
-        raw = res.messages[-1].content
-        try:
-            classification = json.loads(raw)
-        except:
-            classification = {"scamDetected": True}
-
-        if not classification["scamDetected"]:
-            return False, "Okay.", False, None, None
+    is_scam = scam_already_confirmed or await _classify_message(message, history)
+    if not is_scam:
+        return False, "Okay.", False, None, None
 
     persona = persona_rl.choose_persona()
     action = strategy_rl.choose_action("generic", ACTIONS)
@@ -68,24 +108,27 @@ Strategy Action:
 {action}
 """
 
-    t0 = time.perf_counter()
     result = await persona_agent.run(task=persona_context)
     reply = result.messages[-1].content
-    print(f"⏱ Persona: {time.perf_counter() - t0:.3f}s")
 
+    reply_lower = reply.lower()
     session_end = any(
-        k in reply.lower() for k in ["thank you", "goodbye", "conversation complete"]
+        k in reply_lower
+        for k in [
+            "thank you",
+            "got it",
+            "okay, noted",
+            "okay noted",
+            "conversation complete",
+            "goodbye",
+        ]
     )
 
-    print(f"✅ Phase 1 Done in {time.perf_counter() - total_start:.3f}s")
-    return True, reply, session_end, persona, action
+    
+    return is_scam, reply, session_end, persona, action
 
 
 async def process_message_extraction(message, previous_intel, persona, action):
-
-    print("\n========== PHASE 2: EXTRACTION ==========")
-    t0 = time.perf_counter()
-
     extraction_context = f"""
 Latest Scammer Message:
 {message}
@@ -96,7 +139,6 @@ Cumulative Intelligence:
 
     result = await extraction_agent.run(task=extraction_context)
     raw = result.messages[-1].content
-    print(f"⏱ Extraction: {time.perf_counter() - t0:.3f}s")
 
     intel = None
     try:

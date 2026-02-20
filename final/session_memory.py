@@ -11,31 +11,23 @@ class SessionMemory:
         self.sessions = {}
         self.max_history = max_history
 
-    # -------------------------
-    # Add message to session
-    # -------------------------
     def add_message(self, session_id, sender, text):
 
         if session_id not in self.sessions:
             self.sessions[session_id] = []
 
-        self.sessions[session_id].append(
-            {"sender": sender, "text": text, "timestamp": datetime.utcnow().isoformat()}
-        )
+        self.sessions[session_id].append({
+            "sender": sender,
+            "text": text,
+            "timestamp": datetime.utcnow().isoformat()
+        })
 
-        # Trim old history if exceeding limit
         if len(self.sessions[session_id]) > self.max_history:
-            self.sessions[session_id] = self.sessions[session_id][-self.max_history :]
+            self.sessions[session_id] = self.sessions[session_id][-self.max_history:]
 
-    # -------------------------
-    # Get raw history
-    # -------------------------
     def get_history(self, session_id):
         return self.sessions.get(session_id, [])
 
-    # -------------------------
-    # Get formatted history for LLM context
-    # -------------------------
     def get_formatted_history(self, session_id):
 
         history = self.sessions.get(session_id, [])
@@ -46,22 +38,13 @@ class SessionMemory:
 
         return "\n".join(formatted)
 
-    # -------------------------
-    # Clear session memory
-    # -------------------------
     def clear_session(self, session_id):
 
         if session_id in self.sessions:
             del self.sessions[session_id]
 
-    # -------------------------
-    # Check if session exists
-    # -------------------------
     def session_exists(self, session_id):
         return session_id in self.sessions
 
-    # -------------------------
-    # Get total sessions count
-    # -------------------------
     def total_sessions(self):
         return len(self.sessions)

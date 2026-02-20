@@ -1,120 +1,119 @@
 from fastapi import FastAPI, Header, HTTPException
-from final.session_memory import SessionMemory
-from final.session_context_memory import SessionContextMemory
-from final.callback_service import send_callback
-from final.agents.team_orchestrator import (
-    process_message_reply,
-    process_message_extraction,
-)
-from final.config import API_KEY
 import time
-import asyncio
+
+from final.agents.team_orchestrator import (
+    process_message_extraction,
+    process_message_reply,
+)
+from final.callback_service import send_callback
+from final.config import API_KEY
+from final.schemas import HoneypotRequest
+from final.session_context_memory import SessionContextMemory
+from final.session_memory import SessionMemory
 
 app = FastAPI()
 
 memory = SessionMemory(max_history=20)
 context_memory = SessionContextMemory()
 
-MAX_MESSAGES_PER_SESSION = 8
-MIN_MESSAGES_BEFORE_CALLBACK = 5
+MAX_MESSAGES_PER_SESSION = 20
 
-# Track completed sessions
 session_completed = {}
-
-# Track engagement start time
+session_scam_confirmed = {}
 session_start_time = {}
 
-# GLOBAL RATE LOCK (prevents burst to Groq)
-llm_rate_lock = asyncio.Lock()
+
+def _sync_session_history(session_id: str, conversation_history):
+    memory.clear_session(session_id)
+    for item in conversation_history[-memory.max_history:]:
+        memory.add_message(session_id, item.sender, item.text)
 
 
 @app.post("/honeypot")
-async def honeypot(payload: dict, x_api_key: str = Header(None)):
-
-    api_start_time = time.perf_counter()
-    print("\n================ API REQUEST START ================")
-
+async def honeypot(payload: HoneypotRequest, x_api_key: str = Header(None)):
     if x_api_key != API_KEY:
         raise HTTPException(status_code=403, detail="Invalid API Key")
 
-    session_id = payload["sessionId"]
-    msg = payload["message"]["text"]
+    session_id = payload.sessionId
+    msg = payload.message.text
+    incoming_sender = payload.message.sender
 
-    # Start engagement timer
-    if session_id not in session_start_time:
-        session_start_time[session_id] = time.time()
-
-    # Block if already completed
     if session_completed.get(session_id, False):
         return {"status": "completed"}
 
-    # Store scammer message
-    memory.add_message(session_id, "scammer", msg)
+    if session_id not in session_start_time:
+        session_start_time[session_id] = time.time()
+
+    if payload.conversationHistory is not None:
+        _sync_session_history(session_id, payload.conversationHistory)
+    memory.add_message(session_id, incoming_sender, msg)
 
     history = memory.get_formatted_history(session_id)
     previous_intel = context_memory.get_intel(session_id)
     message_count = len(memory.get_history(session_id))
 
-    # ============================
-    # REPLY (with rate control)
-    # ============================
-    async with llm_rate_lock:
-        await asyncio.sleep(5)
-
+    if incoming_sender == "scammer":
         scam, reply, session_end, persona, action = await process_message_reply(
-            msg, history, session_id, previous_intel, message_count
+            msg,
+            history,
+            session_id,
+            previous_intel,
+            message_count,
+            scam_already_confirmed=session_scam_confirmed.get(session_id, False),
         )
+    else:
+        scam = session_scam_confirmed.get(session_id, False)
+        reply = "Okay."
+        session_end = False
+        persona = None
+        action = None
 
-    # Store reply
     memory.add_message(session_id, "user", reply)
 
-    # ============================
-    # EXTRACTION (rate control)
-    # ============================
-    if scam:
-        async with llm_rate_lock:
-            await asyncio.sleep(5)
-            intel = await process_message_extraction(
-                msg, previous_intel, persona, action
-            )
-
+    if scam and incoming_sender == "scammer":
+        session_scam_confirmed[session_id] = True
+        intel = await process_message_extraction(
+            msg,
+            previous_intel,
+            persona,
+            action,
+        )
         if intel:
             context_memory.append_intel(session_id, intel)
 
     total_messages = len(memory.get_history(session_id))
+    should_finalize = session_scam_confirmed.get(session_id, False) and (
+        total_messages >= MAX_MESSAGES_PER_SESSION or session_end
+    )
 
-    # ============================
-    # SESSION END
-    # ============================
-    if total_messages >= MAX_MESSAGES_PER_SESSION or (
-        session_end and total_messages >= MIN_MESSAGES_BEFORE_CALLBACK
-    ):
+    if should_finalize:
         cumulative_intel = context_memory.get_intel(session_id)
-
-        start_time = session_start_time.get(session_id, time.time())
-        engagement_duration = int(time.time() - start_time)
-
-        cumulative_intel["engagementMetrics"] = {
+        started_at = session_start_time.get(session_id, time.time())
+        engagement_metrics = {
             "totalMessagesExchanged": total_messages,
-            "engagementDurationSeconds": engagement_duration
+            "engagementDurationSeconds": max(0, int(time.time() - started_at)),
         }
+        callback_ok, callback_error = await send_callback(
+            session_id=session_id,
+            scam_detected=True,
+            total_messages=total_messages,
+            intel=cumulative_intel,
+            engagement_metrics=engagement_metrics,
+        )
 
-        print(f"\n TRIGGERING CALLBACK for {session_id}")
-        print(cumulative_intel)
+        if not callback_ok:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Mandatory final callback failed: {callback_error}",
+            )
 
-        await send_callback(session_id, total_messages, cumulative_intel)
-
-        # Clear session
         memory.clear_session(session_id)
         context_memory.clear_session(session_id)
         session_completed[session_id] = True
-
-        print(f" Session {session_id} completed & cleared.")
-
-    print(f" API RESPONSE SENT IN: {time.perf_counter() - api_start_time:.3f}s")
-    print("================ API REQUEST END ==================\n")
+        session_scam_confirmed[session_id] = False
+        session_start_time.pop(session_id, None)
 
     return {
         "status": "success",
-        "reply": reply
+        "reply": reply,
     }

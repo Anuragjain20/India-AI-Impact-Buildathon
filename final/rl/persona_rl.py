@@ -2,7 +2,6 @@ import json
 import random
 import os
 
-
 class PersonaRL:
 
     FILE = "/tmp/persona_scores.json"
@@ -13,7 +12,7 @@ class PersonaRL:
             self.scores = {
                 "elderly": {"wins": 1, "trials": 1},
                 "student": {"wins": 1, "trials": 1},
-                "business_owner": {"wins": 1, "trials": 1},
+                "business_owner": {"wins": 1, "trials": 1}
             }
             self.save()
         else:
@@ -28,7 +27,9 @@ class PersonaRL:
             return random.choice(list(self.scores.keys()))
 
         return max(
-            self.scores, key=lambda p: self.scores[p]["wins"] / self.scores[p]["trials"]
+            self.scores,
+            key=lambda p: self.scores[p]["wins"] /
+            self.scores[p]["trials"]
         )
 
     def update(self, persona, score):
